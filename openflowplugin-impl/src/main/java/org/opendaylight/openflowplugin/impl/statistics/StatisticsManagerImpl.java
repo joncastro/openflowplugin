@@ -63,9 +63,14 @@ public class StatisticsManagerImpl implements StatisticsManager, StatisticsManag
 
     private final ConcurrentMap<DeviceInfo, StatisticsContext> contexts = new ConcurrentHashMap<>();
 
-    private static final long basicTimerDelay = 3000;
+    // FIX: detected at telstra(v_20161210_104531):
+    // following two variable "basicTimerDelay" and "maximumTimerDelay" 3seconds seems too 
+    // for a production environment and "maximumTimerDelay" to 15 minutes is to long.
+    // following two variables should be configurable and user should decide what are the 
+    // appropriate values for the environment.
+    private static final long basicTimerDelay = 15000; // 15 seconds interval
     private static long currentTimerDelay = basicTimerDelay;
-    private static final long maximumTimerDelay = 900000; //wait max 15 minutes for next statistics
+    private static final long maximumTimerDelay = 60000; //wait max 60 seconds for next statistics
 
     private StatisticsWorkMode workMode = StatisticsWorkMode.COLLECTALL;
     private final Semaphore workModeGuard = new Semaphore(1, true);
@@ -151,7 +156,7 @@ public class StatisticsManagerImpl implements StatisticsManager, StatisticsManag
                 }
                 calculateTimerDelay(timeCounter);
                 if (throwable instanceof IllegalStateException) {
-                	//FIX: detected at telstra(v_20161210_102100):
+                	//FIX: detected at telstra(v_20161210_104531):
                 	// there are scenarios which an unexpected exception can be produced and this thread is caputing the error
                 	// previous code was calling "stopScheduling(deviceInfo);" method which actually stop the thread that gathers
                 	// the stats. There is a fundamental problem with this approach because the controller still keeps ownership
