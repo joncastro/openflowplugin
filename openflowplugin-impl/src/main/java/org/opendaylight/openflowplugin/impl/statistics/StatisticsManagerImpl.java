@@ -151,10 +151,17 @@ public class StatisticsManagerImpl implements StatisticsManager, StatisticsManag
                 }
                 calculateTimerDelay(timeCounter);
                 if (throwable instanceof IllegalStateException) {
-                    stopScheduling(deviceInfo);
-                } else {
-                    scheduleNextPolling(deviceState, deviceInfo, statisticsContext, timeCounter);
+                	//FIX: detected at telstra(v_20161210_102100):
+                	// there are scenarios which an unexpected exception can be produced and this thread is caputing the error
+                	// previous code was calling "stopScheduling(deviceInfo);" method which actually stop the thread that gathers
+                	// the stats. There is a fundamental problem with this approach because the controller still keeps ownership
+                	// on the node and continue doing other tasks but stats are not generated anymore.
+                	// This fix ensure that the stats will continue even after getting an unexpected behaviour.
+                	// Current shows that this unexpected exception does not break the connection between the contoroller and the
+                	// node and in the next iteration is able to get the stats properly.
+                	LOG.error("unexpected exception on stats thread for node {} ",deviceInfo.getLOGValue(),throwable);
                 }
+                scheduleNextPolling(deviceState, deviceInfo, statisticsContext, timeCounter);
             }
         });
 
@@ -177,6 +184,7 @@ public class StatisticsManagerImpl implements StatisticsManager, StatisticsManag
         if (LOG.isDebugEnabled()) {
             LOG.debug("SCHEDULING NEXT STATISTICS POLLING for device: {}", deviceInfo.getNodeId());
         }
+        
         if (isStatisticsPollingOn) {
             final Timeout pollTimeout = hashedWheelTimer.newTimeout(
                     timeout -> pollStatistics(
