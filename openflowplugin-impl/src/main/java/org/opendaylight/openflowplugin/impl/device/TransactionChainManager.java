@@ -156,12 +156,14 @@ class TransactionChainManager implements TransactionChainListener, AutoCloseable
 
     boolean submitWriteTransaction() {
         synchronized (txLock) {
-            if (!submitIsEnabled) {
-                if (LOG.isTraceEnabled()) {
-                    LOG.trace("transaction not committed - submit block issued");
-                }
-                return false;
-            }
+        	// FIX: detected at telstra(v_20161210_115036): 
+        	// on this line there was a check if submitIsEnabled is enabled in order
+        	// to verify if current transaction can be submitted. These lines have been removed
+        	// because folowing check if wTX is null is more than enough. wTx cannot be null if
+        	// previous someone has requested to write or delete something from the datastore.
+        	// TODO: check why in some scenarios submitIsEnabled is not enabled even there is
+        	// a pending transaction to be submitted.
+        	
             if (Objects.isNull(wTx)) {
                 if (LOG.isTraceEnabled()) {
                     LOG.trace("nothing to commit - submit returns true");
@@ -192,8 +194,16 @@ class TransactionChainManager implements TransactionChainListener, AutoCloseable
                         }
                     }
                     if (initCommit) {
-                        wTx = null;
-                        Optional.ofNullable(lifecycleService).ifPresent(LifecycleService::closeConnection);
+                    	initCommit  = false;
+                    	// FIX: detected at telstra(v_20161210_115036): 
+                    	// there are two things wrong with the following lines:
+                    	// first, wTx is set to null. The reference to wTx is not the one that
+                    	// was used to submit this transaction. It refers to the latest transaction. Notice that at 
+                    	// the end of this method wTX is set to null already.
+                    	// Secondly, we are closing lifecycleService. MDSAL errors could happen relatively frequently
+                    	// and closing the lifecycle could be too extreme.
+//                        wTx = null;
+//                        Optional.ofNullable(lifecycleService).ifPresent(LifecycleService::closeConnection);
                     }
                 }
             });
@@ -205,30 +215,42 @@ class TransactionChainManager implements TransactionChainListener, AutoCloseable
 
     <T extends DataObject> void addDeleteOperationTotTxChain(final LogicalDatastoreType store,
                                                              final InstanceIdentifier<T> path){
-        final WriteTransaction writeTx = getTransactionSafely();
-        if (Objects.nonNull(writeTx)) {
-            writeTx.delete(store, path);
-        } else {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("WriteTx is null for node {}. Delete {} was not realized.", this.nodeId, path);
-            }
-            throw new TransactionChainClosedException(CANNOT_WRITE_INTO_TRANSACTION);
-        }
+    	// FIX: detected at telstra(v_20161210_115036): 
+    	// following lock is required to ensure that the transaction obtain by
+    	// getTransactionSafely is not being used at the same to be submmited by
+    	// another thread.
+    	synchronized (txLock) {
+	        final WriteTransaction writeTx = getTransactionSafely();
+	        if (Objects.nonNull(writeTx)) {
+	            writeTx.delete(store, path);
+	        } else {
+	            if (LOG.isDebugEnabled()) {
+	                LOG.debug("WriteTx is null for node {}. Delete {} was not realized.", this.nodeId, path);
+	            }
+	            throw new TransactionChainClosedException(CANNOT_WRITE_INTO_TRANSACTION);
+	        }
+    	}
     }
 
     <T extends DataObject> void writeToTransaction(final LogicalDatastoreType store,
                                                    final InstanceIdentifier<T> path,
                                                    final T data,
                                                    final boolean createParents){
-        final WriteTransaction writeTx = getTransactionSafely();
-        if (Objects.nonNull(writeTx)) {
-            writeTx.put(store, path, data, createParents);
-        } else {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("WriteTx is null for node {}. Write data for {} was not realized.", this.nodeId, path);
-            }
-            throw new TransactionChainClosedException(CANNOT_WRITE_INTO_TRANSACTION);
-        }
+    	// FIX: detected at telstra(v_20161210_115036):
+    	// following lock is required to ensure that the transaction obtain by
+    	// getTransactionSafely is not being used at the same to be submmited by
+    	// another thread.
+    	synchronized (txLock) {
+	        final WriteTransaction writeTx = getTransactionSafely();
+	        if (Objects.nonNull(writeTx)) {
+	            writeTx.put(store, path, data, createParents);
+	        } else {
+	            if (LOG.isDebugEnabled()) {
+	                LOG.debug("WriteTx is null for node {}. Write data for {} was not realized.", this.nodeId, path);
+	            }
+	            throw new TransactionChainClosedException(CANNOT_WRITE_INTO_TRANSACTION);
+	        }
+    	}
     }
 
     @Override
@@ -252,13 +274,17 @@ class TransactionChainManager implements TransactionChainListener, AutoCloseable
         }
     }
 
+    // this method is called when someone wants to write or delete something from the transaction
+    // the lock should be in writeToTransaction and addDeleteOperationTotTxChain to ensure that 
+    // the transaction used on writting is not submmited before by other thread.
+    // take into account that this class could receive a submitTransaction any time so we need to ensure
+    // that a wtx will never be submitted before writing.
+    @GuardedBy("txLock")
     @Nullable
     private WriteTransaction getTransactionSafely() {
-            synchronized (txLock) {
-                if (wTx == null && TransactionChainManagerStatus.WORKING.equals(transactionChainManagerStatus)) {
-                    Optional.ofNullable(txChainFactory).ifPresent(bindingTransactionChain -> wTx = txChainFactory.newWriteOnlyTransaction());
-                }
-            }
+	    if (wTx == null && TransactionChainManagerStatus.WORKING.equals(transactionChainManagerStatus)) {
+	        Optional.ofNullable(txChainFactory).ifPresent(bindingTransactionChain -> wTx = txChainFactory.newWriteOnlyTransaction());
+	    }
         return wTx;
     }
 
