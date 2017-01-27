@@ -720,6 +720,11 @@ public class DeviceContextImpl implements DeviceContext, ExtensionConverterProvi
             return false;
         }
 
+        // FIX: detected at telstra(v_20170125_160339):
+        // some switches may return an error while sending barrier
+        // so, first, let's become master
+        Futures.addCallback(sendRoleChangeToDevice(OfpRole.BECOMEMASTER), new RpcResultFutureCallback());
+        
         LOG.info("Starting device context cluster services for node {}", deviceInfo.getLOGValue());
 
         lazyTransactionManagerInitialization();
@@ -732,8 +737,6 @@ public class DeviceContextImpl implements DeviceContext, ExtensionConverterProvi
             LOG.warn("Device {} cannot be initialized: ", deviceInfo.getLOGValue(), e);
             return false;
         }
-
-        Futures.addCallback(sendRoleChangeToDevice(OfpRole.BECOMEMASTER), new RpcResultFutureCallback());
 
         return this.clusterInitializationPhaseHandler.onContextInstantiateService(getPrimaryConnectionContext());
     }
