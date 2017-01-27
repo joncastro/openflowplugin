@@ -17,6 +17,8 @@ import com.google.common.util.concurrent.ListenableFuture;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -156,7 +158,7 @@ class TransactionChainManager implements TransactionChainListener, AutoCloseable
 
     boolean submitWriteTransaction() {
         synchronized (txLock) {
-        	// FIX: detected at telstra(v_20161210_115036): 
+        	// FIX: detected at telstra(v_20170125_160339): 
         	// on this line there was a check if submitIsEnabled is enabled in order
         	// to verify if current transaction can be submitted. These lines have been removed
         	// because folowing check if wTX is null is more than enough. wTx cannot be null if
@@ -195,7 +197,7 @@ class TransactionChainManager implements TransactionChainListener, AutoCloseable
                     }
                     if (initCommit) {
                     	initCommit  = false;
-                    	// FIX: detected at telstra(v_20161210_115036): 
+                    	// FIX: detected at telstra(v_20170125_160339): 
                     	// there are two things wrong with the following lines:
                     	// first, wTx is set to null. The reference to wTx is not the one that
                     	// was used to submit this transaction. It refers to the latest transaction. Notice that at 
@@ -215,7 +217,7 @@ class TransactionChainManager implements TransactionChainListener, AutoCloseable
 
     <T extends DataObject> void addDeleteOperationTotTxChain(final LogicalDatastoreType store,
                                                              final InstanceIdentifier<T> path){
-    	// FIX: detected at telstra(v_20161210_115036): 
+    	// FIX: detected at telstra(v_20170125_160339): 
     	// following lock is required to ensure that the transaction obtain by
     	// getTransactionSafely is not being used at the same to be submmited by
     	// another thread.
@@ -236,12 +238,24 @@ class TransactionChainManager implements TransactionChainListener, AutoCloseable
                                                    final InstanceIdentifier<T> path,
                                                    final T data,
                                                    final boolean createParents){
-    	// FIX: detected at telstra(v_20161210_115036):
+    	// FIX: detected at telstra(v_20170125_160339):
     	// following lock is required to ensure that the transaction obtain by
     	// getTransactionSafely is not being used at the same to be submmited by
     	// another thread.
     	synchronized (txLock) {
-	        final WriteTransaction writeTx = getTransactionSafely();
+    		
+    		// ensure last transaction has been submitted before 
+    		// writing more actions
+    		try{
+    			if (lastSubmittedFuture != null){
+    				lastSubmittedFuture.get();
+    				lastSubmittedFuture= null;
+    			}
+    		} catch (InterruptedException | ExecutionException e) {
+    			LOG.error("error submiting last transaction",e);
+			}
+	        
+    		final WriteTransaction writeTx = getTransactionSafely();
 	        if (Objects.nonNull(writeTx)) {
 	            writeTx.put(store, path, data, createParents);
 	        } else {
