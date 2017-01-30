@@ -321,7 +321,7 @@ public final class StatisticsGatheringUtils {
                 LogicalDatastoreType.OPERATIONAL, flowCapableNodePath);
 
         // clean current flows from all known operational tables.
-        // FIX: discovered at telstra(v_20161210_100543):
+        // FIX: discovered at telstra(v_20170125_160339):
         // this method is being called just before writing all the flows statistics coming from the switch. Then, 
         // it cannot be execute as future and it must be executed synchronously. Previous code was deleting the flows in 
         // background with futures and therefore there was not guarantee that the "writing flows" method is executed after cleaning the flows.
@@ -345,7 +345,11 @@ public final class StatisticsGatheringUtils {
 		} catch (InterruptedException|ExecutionException e) {
 			LOG.error("cannot obtain current openflow table information");
 			return Futures.immediateFailedFuture(e);
-		}
+		}finally{
+                  if (readTx != null){
+                     readTx.close();
+                  }
+                }
         
         return Futures.immediateCheckedFuture(null);
 
