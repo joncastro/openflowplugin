@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import org.opendaylight.controller.sal.binding.api.BindingAwareBroker;
 import org.opendaylight.controller.sal.binding.api.RpcProviderRegistry;
+import org.opendaylight.openflowplugin.api.ConnectionException;
 import org.opendaylight.openflowplugin.api.openflow.OFPContext;
 import org.opendaylight.openflowplugin.api.openflow.device.DeviceContext;
 import org.opendaylight.openflowplugin.api.openflow.device.DeviceInfo;
@@ -64,13 +65,13 @@ public class StatisticsManagerImpl implements StatisticsManager, StatisticsManag
     private final ConcurrentMap<DeviceInfo, StatisticsContext> contexts = new ConcurrentHashMap<>();
 
     // FIX: detected at telstra(v_20161210_104531):
-    // following two variable "basicTimerDelay" and "maximumTimerDelay" 3seconds seems too 
+    // following two variable "basicTimerDelay" and "maximumTimerDelay" 3seconds seems too
     // for a production environment and "maximumTimerDelay" to 15 minutes is to long.
-    // following two variables should be configurable and user should decide what are the 
+    // following two variables should be configurable and user should decide what are the
     // appropriate values for the environment.
     private static final long basicTimerDelay = 15000; // 15 seconds interval
     private static long currentTimerDelay = basicTimerDelay;
-    private static final long maximumTimerDelay = 60000; //wait max 60 seconds for next statistics
+    private static final long maximumTimerDelay = 60000; //wait max 15 minutes for next statistics
 
     private StatisticsWorkMode workMode = StatisticsWorkMode.COLLECTALL;
     private final Semaphore workModeGuard = new Semaphore(1, true);
@@ -155,18 +156,16 @@ public class StatisticsManagerImpl implements StatisticsManager, StatisticsManag
                     LOG.trace("Gathering for node {} failure: ", deviceInfo.getLOGValue(), throwable);
                 }
                 calculateTimerDelay(timeCounter);
-                if (throwable instanceof IllegalStateException) {
-                	//FIX: detected at telstra(v_20161210_104531):
-                	// there are scenarios which an unexpected exception can be produced and this thread is caputing the error
-                	// previous code was calling "stopScheduling(deviceInfo);" method which actually stop the thread that gathers
-                	// the stats. There is a fundamental problem with this approach because the controller still keeps ownership
-                	// on the node and continue doing other tasks but stats are not generated anymore.
-                	// This fix ensure that the stats will continue even after getting an unexpected behaviour.
-                	// Current shows that this unexpected exception does not break the connection between the contoroller and the
-                	// node and in the next iteration is able to get the stats properly.
-                	LOG.error("unexpected exception on stats thread for node {} ",deviceInfo.getLOGValue(),throwable);
+                if (throwable instanceof ConnectionException) {
+                    // ConnectionException is raised by StatisticsContextImpl class when the connections
+                    // move to RIP state. In this particular case, there is no need to reschedule
+                    // because this statistics manager should be closed soon
+                    stopScheduling(deviceInfo);
+                } else {
+                    LOG.error("Unexpected exception occurred during statistics collection for node {}, continuing stats collection",deviceInfo.getLOGValue(),throwable);
+                    scheduleNextPolling(deviceState, deviceInfo, statisticsContext, timeCounter);
                 }
-                scheduleNextPolling(deviceState, deviceInfo, statisticsContext, timeCounter);
+
             }
         });
 
@@ -189,7 +188,6 @@ public class StatisticsManagerImpl implements StatisticsManager, StatisticsManag
         if (LOG.isDebugEnabled()) {
             LOG.debug("SCHEDULING NEXT STATISTICS POLLING for device: {}", deviceInfo.getNodeId());
         }
-        
         if (isStatisticsPollingOn) {
             final Timeout pollTimeout = hashedWheelTimer.newTimeout(
                     timeout -> pollStatistics(
