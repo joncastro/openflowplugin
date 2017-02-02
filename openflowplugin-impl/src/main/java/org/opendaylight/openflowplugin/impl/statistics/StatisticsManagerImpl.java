@@ -160,9 +160,12 @@ public class StatisticsManagerImpl implements StatisticsManager, StatisticsManag
                     // ConnectionException is raised by StatisticsContextImpl class when the connections
                     // move to RIP state. In this particular case, there is no need to reschedule
                     // because this statistics manager should be closed soon
+                    LOG.warn("stopping stats scheduler for node {} because there is not available connection",
+                            deviceInfo.getLOGValue(),throwable);
                     stopScheduling(deviceInfo);
                 } else {
-                    LOG.error("Unexpected exception occurred during statistics collection for node {}, continuing stats collection",deviceInfo.getLOGValue(),throwable);
+                    LOG.warn("unexpected error occurred during statistics collection for node {}, rescheduling stats",
+                            deviceInfo.getLOGValue(),throwable);
                     scheduleNextPolling(deviceState, deviceInfo, statisticsContext, timeCounter);
                 }
 
