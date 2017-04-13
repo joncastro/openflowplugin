@@ -343,14 +343,18 @@ public final class StatisticsGatheringUtils {
                     final short tableId = flowStat.getTableId();
                     final FlowRegistryKey flowRegistryKey = FlowRegistryKeyFactory.create(deviceInfo.getVersion(), flowBuilder.build());
                     registry.store(flowRegistryKey);
-                    final FlowId flowId = registry.retrieveDescriptor(flowRegistryKey).getFlowId();
+                    final FlowDescriptor flowDescriptor = registry.retrieveDescriptor(flowRegistryKey);
 
-                    final FlowKey flowKey = new FlowKey(flowId);
-                    flowBuilder.setKey(flowKey);
-                    final TableKey tableKey = new TableKey(tableId);
-                    final InstanceIdentifier<Flow> flowIdent
-                            = fNodeIdent.child(Table.class, tableKey).child(Flow.class, flowKey);
-                    txFacade.writeToTransaction(LogicalDatastoreType.OPERATIONAL, flowIdent, flowBuilder.build());
+                    if (Objects.nonNull(flowDescriptor)) {
+                        final FlowId flowId = flowDescriptor.getFlowId();
+
+                        final FlowKey flowKey = new FlowKey(flowId);
+                        flowBuilder.setKey(flowKey);
+                        final TableKey tableKey = new TableKey(tableId);
+                        final InstanceIdentifier<Flow> flowIdent
+                                = fNodeIdent.child(Table.class, tableKey).child(Flow.class, flowKey);
+                        txFacade.writeToTransaction(LogicalDatastoreType.OPERATIONAL, flowIdent, flowBuilder.build());
+                    }
                 }
             }
         } catch (TransactionChainClosedException e) {
