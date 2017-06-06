@@ -12,8 +12,7 @@ package org.opendaylight.openflowplugin.api.openflow.registry.flow;
 import com.google.common.base.Optional;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.util.List;
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
+import java.util.function.BiConsumer;
 import org.opendaylight.openflowplugin.api.openflow.registry.CommonDeviceRegistry;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.flow.inventory.rev130819.FlowCapableNode;
 
@@ -25,9 +24,10 @@ public interface DeviceFlowRegistry extends CommonDeviceRegistry<FlowRegistryKey
 
     ListenableFuture<List<Optional<FlowCapableNode>>> fill();
 
-    void storeDescriptor(@Nonnull FlowRegistryKey flowRegistryKey, @Nonnull FlowDescriptor flowDescriptor);
+    void storeDescriptor(FlowRegistryKey flowRegistryKey, FlowDescriptor flowDescriptor);
 
-    @Nullable
-    FlowDescriptor retrieveDescriptor(@Nonnull FlowRegistryKey flowRegistryKey);
+    FlowDescriptor retrieveDescriptor(FlowRegistryKey flowRegistryKey);
+
+    void forEachEntry(BiConsumer<FlowRegistryKey, FlowDescriptor> consumer);
 
 }

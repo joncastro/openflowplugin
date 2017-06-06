@@ -13,11 +13,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
-import javax.annotation.concurrent.ThreadSafe;
 import org.opendaylight.openflowplugin.api.openflow.registry.meter.DeviceMeterRegistry;
 import org.opendaylight.yang.gen.v1.urn.opendaylight.meter.types.rev130918.MeterId;
 
-@ThreadSafe
 public class DeviceMeterRegistryImpl implements DeviceMeterRegistry {
 
     private final List<MeterId> meterIds = Collections.synchronizedList(new ArrayList<>());
@@ -31,6 +29,11 @@ public class DeviceMeterRegistryImpl implements DeviceMeterRegistry {
     @Override
     public void addMark(final MeterId meterId) {
         marks.add(meterId);
+    }
+
+    @Override
+    public boolean hasMark(final MeterId meterId) {
+        return marks.contains(meterId);
     }
 
     @Override
